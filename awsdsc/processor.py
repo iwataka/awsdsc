@@ -110,6 +110,12 @@ class ResourceTypeProcessor(ABC):
         """Almost same as list_types method."""
         pass
 
+    def _application_order(self):
+        return 0
+
+    def __lt__(self, other):
+        return self._application_order() < other._application_order()
+
     def _exec_with_next_token(  # nosec
         self,
         params: dict,
@@ -328,6 +334,30 @@ class CodeArtifactDomainProcessor(ResourceTypeProcessor):
         return "AWS::CodeArtifact::Domain"
 
 
+class EcsClusterProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("ecs")
+
+    def _describe(self, key_values: dict[str, str]) -> dict:
+        return self.client.describe_clusters(clusters=[key_values["name"]])["clusters"]
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        return self._exec_with_next_token(
+            {"maxResults": 100},
+            self.client.list_clusters,
+            lambda r: [
+                {"name": d[d.rfind("/") + 1 :]} for d in r["clusterArns"]  # noqa: E203
+            ],
+            "nextToken",
+        )
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::ECS::Cluster"
+
+
 class CodeArtifactRepositoryProcessor(ResourceTypeProcessor):
     def __init__(self):
         pass
@@ -430,3 +460,6 @@ class ConfigProcessor(ResourceTypeProcessor):
         types = list(set(types))
 
         return types
+
+    def _application_order(self):
+        return 99

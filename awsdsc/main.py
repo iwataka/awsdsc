@@ -36,7 +36,7 @@ def generate_processors(cls=ResourceTypeProcessor) -> Iterator[ResourceTypeProce
 
 
 # Automatically filled with processor instances of ResourceTypeProcessor subclasses
-processors: list[ResourceTypeProcessor] = list(generate_processors())
+processors: list[ResourceTypeProcessor] = list(sorted(generate_processors()))
 
 
 def get_processor(typ: str) -> ResourceTypeProcessor:
@@ -55,7 +55,7 @@ def list_candidates(typ: str) -> list[dict]:
 
 
 def list_types() -> list[str]:
-    return sum([p.list_types() for p in processors], [])
+    return list(set(sum([p.list_types() for p in processors], [])))
 
 
 def print_result(
