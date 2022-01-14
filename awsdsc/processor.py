@@ -424,9 +424,12 @@ class ConfigProcessor(ResourceTypeProcessor):
         results = res["Results"]
         results = [json.loads(r) for r in results]
         results = self._json_loads_recursively(results)
-        for r in results:
+        for i, r in enumerate(results):
             del r["resourceType"]
             del r["tags"]
+            result = r["configuration"]
+            result.update(r["supplementaryConfiguration"])
+            results[i] = result
         return results
 
     def _list_candidates(self, typ: str) -> list[dict[str, str]]:
