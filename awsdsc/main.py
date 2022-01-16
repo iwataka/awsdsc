@@ -69,6 +69,8 @@ def print_result(
     elif style == "json":
         txt = json.dumps(result, indent=2, default=json_serialize)
         lexer = JsonLexer()
+    else:
+        raise Exception(f"Unknown stye: {style}")
 
     if colorize:
         txt = highlight(txt, lexer, TerminalFormatter())
@@ -119,7 +121,10 @@ class QueryRecognizer:
     def to_key_values(self, text: str) -> dict[str, str]:
         result = {}
         for q in text.split(self.separator):
-            k, v = self.query_pattern.match(q).groups()
+            m = self.query_pattern.match(q)
+            if m is None:
+                raise Exception(f"{q} doesn't match to query pattern.")
+            k, v = m.groups()
             result[k] = v
         return result
 
