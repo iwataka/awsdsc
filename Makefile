@@ -1,3 +1,5 @@
+.PHONY: format lint test install build clean
+
 all: format lint test
 
 format:
@@ -14,3 +16,13 @@ test:
 
 install:
 	pip install .
+
+build:
+	pyinstaller awsdsc/main.py \
+		--onefile \
+		--name awsdsc \
+		--clean
+
+clean:
+	rm -f awsdsc.spec
+	rm -rf dist/
