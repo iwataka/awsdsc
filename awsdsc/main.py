@@ -1,6 +1,5 @@
 """Provides main features for CLI"""
 
-import argparse
 import json
 import re
 import sys
@@ -8,6 +7,7 @@ from datetime import date, datetime
 from typing import Iterator, Union
 
 import boto3.session
+import click
 import yaml
 from prompt_toolkit import HTML, PromptSession, print_formatted_text
 from prompt_toolkit.completion import (
@@ -73,7 +73,7 @@ def print_result(
     style: str,
     colorize: bool,
 ):
-    if style in ["yml", "yaml"]:
+    if style == "yaml":
         txt = yaml.dump(result)
         lexer = YamlLexer()
     elif style == "json":
@@ -165,62 +165,6 @@ class ResourceQueryValidator(Validator):
         if len(self.keys) > self.placeholder_key_limit:
             key_pattern += "|..."
         return f"key({key_pattern}) = value, ..."
-
-
-class AwsdscArgumentParser(argparse.ArgumentParser):
-    def __init__(self):
-        super().__init__(
-            description="Universal describe command for AWS resources",
-        )
-        self.add_argument(
-            "--format",
-            "-f",
-            help="output style. YAML or JSON (JSON by default) is available.",
-            choices=["yml", "yaml", "json"],
-            default="json",
-            required=False,
-        )
-        self.add_argument(
-            "--show-supported-types",
-            help="show AWS resource types supported by this command",
-            required=False,
-            action="store_true",
-        )
-        self.add_argument(
-            "--version",
-            "-v",
-            action="version",
-            version=__version__,
-            help="show version",
-        )
-        self.add_argument(
-            "--type",
-            "-t",
-            help="AWS resource type to describe",
-            required=False,
-        )
-        self.add_argument(
-            "--query",
-            "-q",
-            help="query for searching target AWS resource",
-            required=False,
-        )
-        self.add_argument(
-            "--colorize",
-            action=argparse.BooleanOptionalAction,
-            help="colorize `describe` output (do colorize by default)",
-            default=True,
-        )
-        self.add_argument(
-            "--profile",
-            help="AWS profile to use in this command",
-            required=False,
-        )
-        self.add_argument(
-            "--region",
-            help="AWS region to use in this command",
-            required=False,
-        )
 
 
 def run_show_supported_types(processors: list[ResourceTypeProcessor]):
@@ -317,28 +261,87 @@ def inquire_query(
     )
 
 
-def main():
+@click.command()
+@click.option(
+    "--type",
+    "-t",
+    help="aws resource type to describe",
+    metavar="TYPE",
+)
+@click.option(
+    "--query",
+    "-q",
+    help="query for searching target aws resource",
+    metavar="QUERY",
+)
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["json", "yaml"], case_sensitive=True),
+    help="output style. YAML and JSON are available.",
+    default="json",
+    show_default=True,
+    envvar="AWSDSC_FORMAT",
+    show_envvar=True,
+)
+@click.option(
+    "--colorize/--no-colorize",
+    "-c",
+    help="colorize describe output",
+    default=False,
+    show_default=True,
+    envvar="AWSDSC_COLORIZE",
+    show_envvar=True,
+)
+@click.option(
+    "--show-supported-types",
+    is_flag=True,
+    help="show AWS resource types supported by this command",
+    default=False,
+)
+@click.option(
+    "--profile",
+    help="AWS profile to use in this command",
+    metavar="PROFILE",
+)
+@click.option(
+    "--region",
+    help="AWS region to use in this command",
+    metavar="REGION",
+)
+@click.version_option(version=__version__)
+def cli(
+    type: str,
+    query: str,
+    format: str,
+    colorize: bool,
+    show_supported_types: bool,
+    profile: str,
+    region: str,
+):
+    """Universal describe command for AWS resources"""
     try:
-        parser = AwsdscArgumentParser()
-        args = parser.parse_args()
-
         session_params = {}
-        if args.profile:
-            session_params["profile_name"] = args.profile
-        if args.region:
-            session_params["region_name"] = args.region
+        if profile:
+            session_params["profile_name"] = profile
+        if region:
+            session_params["region_name"] = region
         session = boto3.session.Session(**session_params)
         processors = list(sorted(generate_processors(session)))
 
-        if args.show_supported_types:
+        if show_supported_types:
             run_show_supported_types(processors)
             sys.exit(0)
 
-        run_default(args.type, args.query, args.format, args.colorize, processors)
+        run_default(type, query, format, colorize, processors)
 
     except AwsdscException as e:
         print_formatted_text(HTML(f"<ansired>{str(e)}</ansired>"))
         sys.exit(1)
+
+
+def main():
+    cli()
 
 
 if __name__ == "__main__":

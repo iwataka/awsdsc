@@ -19,3 +19,13 @@ Then run `awsdsc` without any arguments.
 You will be prompted to input type and query for AWS resources to describe.
 
 For more details, please run `awsdsc --help` and check the output text.
+
+## Configuration
+
+You want to colorize output, run this command like below.
+
+```
+awsdsc --colorize
+AWSDSC_COLORIZE=true awsdsc
+# You can `export AWSDSC_COLORIZE=true` in .bashrc-like file
+```
