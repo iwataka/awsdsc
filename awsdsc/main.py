@@ -7,6 +7,7 @@ import sys
 from datetime import date, datetime
 from typing import Iterator, Union
 
+import boto3.session
 import yaml
 from prompt_toolkit import HTML, PromptSession, print_formatted_text
 from prompt_toolkit.completion import (
@@ -26,35 +27,44 @@ from awsdsc.exception import AwsdscException, UnsupportedTypeException
 from awsdsc.processor import ResourceTypeProcessor
 
 
-def generate_processors(cls=ResourceTypeProcessor) -> Iterator[ResourceTypeProcessor]:
+def generate_processors(
+    session: boto3.session.Session,
+    cls=ResourceTypeProcessor,
+) -> Iterator[ResourceTypeProcessor]:
     subclasses = cls.__subclasses__()
     if len(subclasses) == 0:
-        yield cls()
+        yield cls(session)
     for c in subclasses:
-        for p in generate_processors(c):
+        for p in generate_processors(session, c):
             yield p
 
 
-# Automatically filled with processor instances of ResourceTypeProcessor subclasses
-processors: list[ResourceTypeProcessor] = list(sorted(generate_processors()))
-
-
-def get_processor(typ: str) -> ResourceTypeProcessor:
+def get_processor(
+    typ: str,
+    processors: list[ResourceTypeProcessor],
+) -> ResourceTypeProcessor:
     try:
         return next(p for p in processors if typ in p.list_types())
     except StopIteration:
         raise UnsupportedTypeException(typ)
 
 
-def describe(typ: str, key_values: dict[str, str]) -> Union[list[dict], dict]:
-    return get_processor(typ).describe(key_values)
+def describe(
+    typ: str,
+    key_values: dict[str, str],
+    processors: list[ResourceTypeProcessor],
+) -> Union[list[dict], dict]:
+    return get_processor(typ, processors).describe(key_values)
 
 
-def list_candidates(typ: str) -> list[dict]:
-    return get_processor(typ).list_candidates(typ)
+def list_candidates(
+    typ: str,
+    processors: list[ResourceTypeProcessor],
+) -> list[dict]:
+    return get_processor(typ, processors).list_candidates(typ)
 
 
-def list_types() -> list[str]:
+def list_types(processors: list[ResourceTypeProcessor]) -> list[str]:
     return list(set(sum([p.list_types() for p in processors], [])))
 
 
@@ -89,8 +99,9 @@ def describe_and_print_result(
     fmt: str,
     typ: str,
     colorize: bool,
+    processors: list[ResourceTypeProcessor],
 ):
-    result = describe(typ, key_values)
+    result = describe(typ, key_values, processors)
     if isinstance(result, list) and len(result) == 1:
         result = result[0]
     print_result(result, fmt, colorize)
@@ -200,10 +211,20 @@ class AwsdscArgumentParser(argparse.ArgumentParser):
             help="colorize `describe` output (do colorize by default)",
             default=True,
         )
+        self.add_argument(
+            "--profile",
+            help="AWS profile to use in this command",
+            required=False,
+        )
+        self.add_argument(
+            "--region",
+            help="AWS region to use in this command",
+            required=False,
+        )
 
 
-def run_show_supported_types():
-    types = list_types()
+def run_show_supported_types(processors: list[ResourceTypeProcessor]):
+    types = list_types(processors)
     for t in sorted(types):
         print(t)
 
@@ -236,7 +257,13 @@ class QueryCompleter(Completer):
         return self.base_completer.get_completions(d, complete_event)
 
 
-def run_default(typ: str, query: str, fmt: str, colorize: bool):
+def run_default(
+    typ: str,
+    query: str,
+    fmt: str,
+    colorize: bool,
+    processors: list[ResourceTypeProcessor],
+):
     try:
         session: PromptSession = PromptSession(
             complete_while_typing=True,
@@ -247,26 +274,27 @@ def run_default(typ: str, query: str, fmt: str, colorize: bool):
 
         typ = typ or session.prompt(
             message="Resource type> ",
-            completer=FuzzyWordCompleter(list_types()),
+            completer=FuzzyWordCompleter(list_types(processors)),
             validator=ResourceTypeValidator(),
             placeholder="AWS::SERVICE::DATA_TYPE",
         )
 
         query_recognizer = QueryRecognizer()
-        query = query or inquire_query(session, typ, query_recognizer)
+        query = query or inquire_query(session, typ, query_recognizer, processors)
     except KeyboardInterrupt:
         raise AwsdscException("Quit by user input")
 
     key_values = query_recognizer.to_key_values(query)
-    describe_and_print_result(key_values, fmt, typ, colorize)
+    describe_and_print_result(key_values, fmt, typ, colorize, processors)
 
 
 def inquire_query(
     session: PromptSession,
     typ: str,
     query_recognizer: QueryRecognizer,
+    processors: list[ResourceTypeProcessor],
 ) -> str:
-    candidates = list_candidates(typ)
+    candidates = list_candidates(typ, processors)
     if not candidates:
         raise AwsdscException(f"No {typ} resources found")
     nested_dict = cands_to_nested_dict(candidates)
@@ -294,11 +322,19 @@ def main():
         parser = AwsdscArgumentParser()
         args = parser.parse_args()
 
+        session_params = {}
+        if args.profile:
+            session_params["profile_name"] = args.profile
+        if args.region:
+            session_params["region_name"] = args.region
+        session = boto3.session.Session(**session_params)
+        processors = list(sorted(generate_processors(session)))
+
         if args.show_supported_types:
-            run_show_supported_types()
+            run_show_supported_types(processors)
             sys.exit(0)
 
-        run_default(args.type, args.query, args.format, args.colorize)
+        run_default(args.type, args.query, args.format, args.colorize, processors)
 
     except AwsdscException as e:
         print_formatted_text(HTML(f"<ansired>{str(e)}</ansired>"))

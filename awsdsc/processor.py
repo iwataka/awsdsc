@@ -14,9 +14,10 @@ import contextlib
 import json
 import urllib.parse
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Union, overload
+from typing import Any, Callable, Optional, Union, overload
 
 import boto3
+import boto3.session
 
 from awsdsc.exception import AwsdscException
 
@@ -45,13 +46,18 @@ Make sure your AWS credentials are properly setup.
 
 class ResourceTypeProcessor(ABC):
     @abstractmethod
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        self.session = session
 
-    # TODO: init with specified AWS region
     @abstractmethod
     def _init_client(self):
         pass
+
+    def _create_client(self, name: str):
+        if self.session:
+            return self.session.client(name)
+        else:
+            return boto3.client(name)
 
     @AWS_access
     def describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
@@ -185,11 +191,11 @@ class ResourceTypeProcessor(ABC):
 
 
 class EventsRuleProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("events")
+        self.client = self._create_client("events")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         rule = self.client.describe_rule(**key_values)
@@ -218,18 +224,20 @@ class EventsRuleProcessor(ResourceTypeProcessor):
 class Ec2Processor(ResourceTypeProcessor):
     def __init__(
         self,
+        session: Optional[boto3.session.Session],
         data_label: str,
         key_value_labels: dict[str, str],
         describe_func: str,
         resource_type: str,
     ):
+        super().__init__(session)
         self._data_label = data_label
         self._key_value_labels = key_value_labels
         self._describe_func = describe_func
         self._resource_type = resource_type
 
-    def _init_client(self):
-        self.client = boto3.client("ec2")
+    def _init_client(self, session: boto3.session.Session = None):
+        self.client = self._create_client("ec2")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         filters = [{"Name": k, "Values": [v]} for k, v in key_values.items()]
@@ -267,8 +275,9 @@ class Ec2Processor(ResourceTypeProcessor):
 
 
 class Ec2VpcProcessor(Ec2Processor):
-    def __init__(self):
+    def __init__(self, session: boto3.session.Session = None):
         super().__init__(
+            session,
             "Vpcs",
             {
                 "cidr": "CidrBlock",
@@ -283,8 +292,9 @@ class Ec2VpcProcessor(Ec2Processor):
 
 
 class Ec2SubnetProcessor(Ec2Processor):
-    def __init__(self):
+    def __init__(self, session: boto3.session.Session = None):
         super().__init__(
+            session,
             "Subnets",
             {
                 "availability-zone": "AvailabilityZone",
@@ -303,8 +313,9 @@ class Ec2SubnetProcessor(Ec2Processor):
 
 
 class Ec2NetworkInterfacesProcessor(Ec2Processor):
-    def __init__(self):
+    def __init__(self, session: boto3.session.Session = None):
         super().__init__(
+            session,
             "NetworkInterfaces",
             {
                 "availability-zone": "AvailabilityZone",
@@ -326,11 +337,11 @@ class Ec2NetworkInterfacesProcessor(Ec2Processor):
 
 
 class EcsClusterProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("ecs")
+        self.client = self._create_client("ecs")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         return self.client.describe_clusters(clusters=[key_values["name"]])["clusters"]
@@ -350,11 +361,11 @@ class EcsClusterProcessor(ResourceTypeProcessor):
 
 
 class CodeArtifactDomainProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("codeartifact")
+        self.client = self._create_client("codeartifact")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         return self.client.describe_domain(**key_values)["domain"]
@@ -372,11 +383,11 @@ class CodeArtifactDomainProcessor(ResourceTypeProcessor):
 
 
 class CodeArtifactRepositoryProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("codeartifact")
+        self.client = self._create_client("codeartifact")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         return self.client.describe_repository(**key_values)["repository"]
@@ -401,11 +412,11 @@ class CodeArtifactRepositoryProcessor(ResourceTypeProcessor):
 
 
 class CodeCommitRepositoryProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("codecommit")
+        self.client = self._create_client("codecommit")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         return self.client.get_repository(**key_values)
@@ -428,11 +439,11 @@ class CodeCommitRepositoryProcessor(ResourceTypeProcessor):
 
 
 class ApiGatewayV2DomainNameProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("apigatewayv2")
+        self.client = self._create_client("apigatewayv2")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         return self.client.get_domain_name(**key_values)
@@ -455,11 +466,11 @@ class ApiGatewayV2DomainNameProcessor(ResourceTypeProcessor):
 
 
 class ApiGatewayV2VpcLinkProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("apigatewayv2")
+        self.client = self._create_client("apigatewayv2")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         def _filter_func(d: dict) -> bool:
@@ -500,11 +511,11 @@ class ApiGatewayV2VpcLinkProcessor(ResourceTypeProcessor):
 
 
 class ConfigConfigurationRecorderProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("config")
+        self.client = self._create_client("config")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         params = {
@@ -523,11 +534,11 @@ class ConfigConfigurationRecorderProcessor(ResourceTypeProcessor):
 
 
 class ConfigDeliveryChannelProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session = None):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("config")
+        self.client = self._create_client("config")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         params = {
@@ -544,11 +555,11 @@ class ConfigDeliveryChannelProcessor(ResourceTypeProcessor):
 
 
 class ConfigProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
+    def __init__(self, session: boto3.session.Session):
+        super().__init__(session)
 
     def _init_client(self):
-        self.client = boto3.client("config")
+        self.client = self._create_client("config")
 
     def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
         query_fields = [
