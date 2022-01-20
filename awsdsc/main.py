@@ -303,3 +303,7 @@ def main():
     except AwsdscException as e:
         print_formatted_text(HTML(f"<ansired>{str(e)}</ansired>"))
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

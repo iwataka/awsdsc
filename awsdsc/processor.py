@@ -48,6 +48,7 @@ class ResourceTypeProcessor(ABC):
     def __init__(self):
         pass
 
+    # TODO: init with specified AWS region
     @abstractmethod
     def _init_client(self):
         pass
@@ -122,6 +123,7 @@ class ResourceTypeProcessor(ABC):
         func: Callable[..., dict],
         postfunc: Callable[[dict], list],
         next_token_key: str = "NextToken",
+        filter_func: Callable[[dict], bool] = None,
         next_token: str = None,
     ):
         """Call AWS API function with next_token.
@@ -146,8 +148,11 @@ class ResourceTypeProcessor(ABC):
                 func,
                 postfunc,
                 next_token_key,
+                filter_func,
                 res[next_token_key],
             )
+            if filter_func:
+                rs = filter(filter_func, rs)
             results.extend(rs)
 
         return results
@@ -320,28 +325,6 @@ class Ec2NetworkInterfacesProcessor(Ec2Processor):
         )
 
 
-class CodeArtifactDomainProcessor(ResourceTypeProcessor):
-    def __init__(self):
-        pass
-
-    def _init_client(self):
-        self.client = boto3.client("codeartifact")
-
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
-        return self.client.describe_domain(**key_values)["domain"]
-
-    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
-        return self._exec_with_next_token(
-            {"maxResults": 100},
-            self.client.list_domains,
-            lambda r: [{"domain": d["name"]} for d in r["domains"]],
-            "nextToken",
-        )
-
-    def _list_types(self) -> Union[str, list[str]]:
-        return "AWS::CodeArtifact::Domain"
-
-
 class EcsClusterProcessor(ResourceTypeProcessor):
     def __init__(self):
         pass
@@ -364,6 +347,28 @@ class EcsClusterProcessor(ResourceTypeProcessor):
 
     def _list_types(self) -> Union[str, list[str]]:
         return "AWS::ECS::Cluster"
+
+
+class CodeArtifactDomainProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("codeartifact")
+
+    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+        return self.client.describe_domain(**key_values)["domain"]
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        return self._exec_with_next_token(
+            {"maxResults": 100},
+            self.client.list_domains,
+            lambda r: [{"domain": d["name"]} for d in r["domains"]],
+            "nextToken",
+        )
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::CodeArtifact::Domain"
 
 
 class CodeArtifactRepositoryProcessor(ResourceTypeProcessor):
@@ -393,6 +398,149 @@ class CodeArtifactRepositoryProcessor(ResourceTypeProcessor):
 
     def _list_types(self) -> Union[str, list[str]]:
         return "AWS::CodeArtifact::Repository"
+
+
+class CodeCommitRepositoryProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("codecommit")
+
+    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+        return self.client.get_repository(**key_values)
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        return self._exec_with_next_token(
+            {},
+            self.client.list_repositories,
+            lambda r: [
+                {
+                    "repositoryName": d["repositoryName"],
+                }
+                for d in r["repositories"]
+            ],
+            "nextToken",
+        )
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::CodeCommit::Repository"
+
+
+class ApiGatewayV2DomainNameProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("apigatewayv2")
+
+    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+        return self.client.get_domain_name(**key_values)
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        return self._exec_with_next_token(
+            {"MaxResults": "100"},
+            self.client.get_domain_names,
+            lambda r: [
+                {
+                    "DomainName": d["DomainName"],
+                }
+                for d in r["Items"]
+            ],
+            "NextToken",
+        )
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::ApiGatewayV2::DomainName"
+
+
+class ApiGatewayV2VpcLinkProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("apigatewayv2")
+
+    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+        def _filter_func(d: dict) -> bool:
+            for k, v in key_values.items():
+                if k.startswith("tag:"):
+                    name = k[4:]
+                    if d["Tags"][name] != v:
+                        return False
+                else:
+                    if d[k] != v:
+                        return False
+            return True
+
+        return self._exec_with_next_token(
+            {"MaxResults": "100"},
+            self.client.get_vpc_links,
+            lambda r: r["Items"],
+            "NextToken",
+            _filter_func,
+        )
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        return self._exec_with_next_token(
+            {"MaxResults": "100"},
+            self.client.get_vpc_links,
+            lambda r: [
+                {
+                    "Name": d["Name"],
+                    **{f"tag:{t}": d["Tags"][t] for t in d["Tags"].keys()},
+                }
+                for d in r["Items"]
+            ],
+            "NextToken",
+        )
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::ApiGatewayV2::VpcLink"
+
+
+class ConfigConfigurationRecorderProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("config")
+
+    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+        params = {
+            "ConfigurationRecorderNames": [key_values["name"]],
+        }
+        return self.client.describe_configuration_recorders(**params)[
+            "ConfigurationRecorders"
+        ]
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        res = self.client.describe_configuration_recorders()
+        return [{"name": d["name"]} for d in res["ConfigurationRecorders"]]
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::Config::ConfigurationRecorder"
+
+
+class ConfigDeliveryChannelProcessor(ResourceTypeProcessor):
+    def __init__(self):
+        pass
+
+    def _init_client(self):
+        self.client = boto3.client("config")
+
+    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+        params = {
+            "DeliveryChannelNames": [key_values["name"]],
+        }
+        return self.client.describe_delivery_channels(**params)
+
+    def _list_candidates(self, typ: str) -> list[dict[str, str]]:
+        res = self.client.describe_delivery_channels()
+        return [{"name": d["name"]} for d in res["DeliveryChannels"]]
+
+    def _list_types(self) -> Union[str, list[str]]:
+        return "AWS::Config::DeliveryChannel"
 
 
 class ConfigProcessor(ResourceTypeProcessor):
