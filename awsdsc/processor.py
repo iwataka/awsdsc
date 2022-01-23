@@ -60,7 +60,10 @@ class ResourceTypeProcessor(ABC):
             return boto3.client(name)
 
     @AWS_access
-    def describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         """Retrieves configuration of AWS resources searched by query composed by the given key-value pairs
 
         Args:
@@ -74,7 +77,10 @@ class ResourceTypeProcessor(ABC):
         return self._describe(key_values)
 
     @abstractmethod
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         """Almost same as describe method."""
         pass
 
@@ -125,13 +131,13 @@ class ResourceTypeProcessor(ABC):
 
     def _exec_with_next_token(  # nosec
         self,
-        params: dict,
-        func: Callable[..., dict],
-        postfunc: Callable[[dict], list],
+        params: dict[str, Any],
+        func: Callable[..., dict[str, Any]],
+        postfunc: Callable[[dict[str, Any]], list],
         next_token_key: str = "NextToken",
-        filter_func: Callable[[dict], bool] = None,
+        filter_func: Callable[[dict[str, Any]], bool] = None,
         next_token: str = None,
-    ):
+    ) -> list[dict[str, Any]]:
         """Call AWS API function with next_token.
 
         Args:
@@ -147,6 +153,8 @@ class ResourceTypeProcessor(ABC):
 
         res = func(**params)
         results = postfunc(res)
+        if filter_func:
+            results = list(filter(filter_func, results))
 
         if next_token_key in res and res[next_token_key]:
             rs = self._exec_with_next_token(
@@ -157,21 +165,22 @@ class ResourceTypeProcessor(ABC):
                 filter_func,
                 res[next_token_key],
             )
-            if filter_func:
-                rs = filter(filter_func, rs)
             results.extend(rs)
 
         return results
 
     @overload
-    def _json_loads_recursively(self, obj: dict) -> dict:
+    def _json_loads_recursively(self, obj: dict[str, Any]) -> dict[str, Any]:
         ...
 
     @overload
     def _json_loads_recursively(self, obj: list) -> list:
         ...
 
-    def _json_loads_recursively(self, obj: Union[list, dict]) -> Union[list, dict]:
+    def _json_loads_recursively(
+        self,
+        obj: Union[list, dict[str, Any]],
+    ) -> Union[list, dict[str, Any]]:
         """Converts JSON string field to object recursively."""
         return self._map_nested_dicts(obj, self._json_loads_without_error)
 
@@ -197,7 +206,9 @@ class EventsRuleProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("events")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self, key_values: dict[str, str]
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         rule = self.client.describe_rule(**key_values)
         rule["EventPattern"] = json.loads(rule["EventPattern"])
         targets = self._describe_events_rule_targets(rule["Name"])
@@ -239,7 +250,10 @@ class Ec2Processor(ResourceTypeProcessor):
     def _init_client(self, session: boto3.session.Session = None):
         self.client = self._create_client("ec2")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         filters = [{"Name": k, "Values": [v]} for k, v in key_values.items()]
         return self._exec_with_next_token(
             {
@@ -257,7 +271,7 @@ class Ec2Processor(ResourceTypeProcessor):
             self._post_process_list_candidates,
         )
 
-    def _post_process_list_candidates(self, result: dict):
+    def _post_process_list_candidates(self, result: dict[str, Any]):
         cands = []
         for d in result[self._data_label]:
             cand = dict()
@@ -343,7 +357,10 @@ class EcsClusterProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("ecs")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         return self.client.describe_clusters(clusters=[key_values["name"]])["clusters"]
 
     def _list_candidates(self, typ: str) -> list[dict[str, str]]:
@@ -367,7 +384,10 @@ class CodeArtifactDomainProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("codeartifact")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         return self.client.describe_domain(**key_values)["domain"]
 
     def _list_candidates(self, typ: str) -> list[dict[str, str]]:
@@ -389,7 +409,10 @@ class CodeArtifactRepositoryProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("codeartifact")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         return self.client.describe_repository(**key_values)["repository"]
 
     def _list_candidates(self, typ: str) -> list[dict[str, str]]:
@@ -418,7 +441,10 @@ class CodeCommitRepositoryProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("codecommit")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         return self.client.get_repository(**key_values)
 
     def _list_candidates(self, typ: str) -> list[dict[str, str]]:
@@ -445,7 +471,10 @@ class ApiGatewayV2DomainNameProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("apigatewayv2")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         return self.client.get_domain_name(**key_values)
 
     def _list_candidates(self, typ: str) -> list[dict[str, str]]:
@@ -472,8 +501,11 @@ class ApiGatewayV2VpcLinkProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("apigatewayv2")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
-        def _filter_func(d: dict) -> bool:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
+        def _filter_func(d: dict[str, Any]) -> bool:
             for k, v in key_values.items():
                 if k.startswith("tag:"):
                     name = k[4:]
@@ -517,7 +549,10 @@ class ConfigConfigurationRecorderProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("config")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         params = {
             "ConfigurationRecorderNames": [key_values["name"]],
         }
@@ -540,7 +575,10 @@ class ConfigDeliveryChannelProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("config")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         params = {
             "DeliveryChannelNames": [key_values["name"]],
         }
@@ -561,7 +599,10 @@ class ConfigProcessor(ResourceTypeProcessor):
     def _init_client(self):
         self.client = self._create_client("config")
 
-    def _describe(self, key_values: dict[str, str]) -> Union[list[dict], dict]:
+    def _describe(
+        self,
+        key_values: dict[str, str],
+    ) -> Union[list[dict[str, Any]], dict[str, Any]]:
         query_fields = [
             "tags",
             "configuration",
@@ -587,7 +628,7 @@ class ConfigProcessor(ResourceTypeProcessor):
             self._post_process_describe,
         )
 
-    def _post_process_describe(self, res: dict) -> list:
+    def _post_process_describe(self, res: dict[str, Any]) -> list:
         results = res["Results"]
         results = [json.loads(r) for r in results]
         results = self._json_loads_recursively(results)
@@ -610,7 +651,7 @@ class ConfigProcessor(ResourceTypeProcessor):
             self._post_process_list_candidates,
         )
 
-    def _post_process_list_candidates(self, res: dict):
+    def _post_process_list_candidates(self, res: dict[str, Any]):
         results = [json.loads(s) for s in res["Results"]]
         return [
             {

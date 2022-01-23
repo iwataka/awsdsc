@@ -30,11 +30,22 @@ def test_exec_with_next_token():
     assert results == [f"result{n}" for n in range(1, 11)]
 
 
+def test_exec_with_next_token_with_filter():
+    results = processor._exec_with_next_token(
+        {},
+        _do_with_next_token,
+        lambda r: r["Results"],
+        "NextToken",
+        lambda r: r == "result1",
+    )
+    assert results == ["result1"]
+
+
 def _do_with_next_token(NextToken: str = None):
     new_next_token_num = int(NextToken) + 1 if NextToken else 1
     results: dict = {"Results": [f"result{new_next_token_num}"]}
     if new_next_token_num < 10:
-        results["NextToken"] = str(new_next_token_num)
+        return {**results, "NextToken": str(new_next_token_num)}
     return results
 
 
