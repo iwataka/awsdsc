@@ -1,4 +1,4 @@
-.PHONY: format lint test install build clean
+.PHONY: format lint test install bin clean
 
 all: format lint test
 
@@ -17,11 +17,8 @@ test:
 install:
 	pip install .
 
-build:
-	pyinstaller awsdsc/main.py \
-		--onefile \
-		--name awsdsc \
-		--clean
+bin:
+	python pyinstaller.py
 
 clean:
 	rm -f awsdsc.spec
