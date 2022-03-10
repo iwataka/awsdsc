@@ -23,3 +23,9 @@ bin:
 clean:
 	rm -f awsdsc.spec
 	rm -rf dist/
+
+upload:
+	python -m build --sdist
+	python -m build --wheel
+	twine check dist/*
+	twine upload dist/*
