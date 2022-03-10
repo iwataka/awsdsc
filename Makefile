@@ -1,4 +1,4 @@
-.PHONY: format lint test install bin clean
+.PHONY: format lint test install bin clean upload
 
 all: format lint test
 

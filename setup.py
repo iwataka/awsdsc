@@ -14,7 +14,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Takatoshi Iwasa",
-    author_email="Takatoshi.Iwasa@jp.nttdata.com",
+    author_email="ap.gr.le@gmail.com",
     packages=["awsdsc"],
     entry_points={
         "console_scripts": [
