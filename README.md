@@ -1,12 +1,16 @@
 # Awsdsc (abbreviation of AWS describe)
 
-Universal describe command for AWS resources.
+Universal describe command for AWS resources (this is an **EXPERIMENTAL** project).
 
 ## Installation
 
 ```
 pip install awsdsc
 ```
+
+## Demo
+
+![demo](demo.gif)
 
 ## Basic Usage
 
